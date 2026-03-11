@@ -1,2 +1,51 @@
-# autoclicker
-thingie
+# Python Autoclicker
+
+A simple Python autoclicker with a tiny desktop GUI.
+
+## macOS 11.0+ compatibility
+This app works on macOS Big Sur (11.0) and newer with Python 3.
+
+Before using the autoclicker on macOS, grant Accessibility permission:
+1. Open **System Settings** (or **System Preferences** on older versions).
+2. Go to **Privacy & Security → Accessibility**.
+3. Enable access for the app launching Python (for example, Terminal, iTerm, or your Python app bundle).
+
+Without this permission, macOS blocks synthetic mouse clicks and global hotkeys.
+
+
+## Windows version (separate file)
+A dedicated Windows build is available as `app_windows.py`.
+
+Run it on Windows with:
+```bash
+python app_windows.py
+```
+
+Hotkey toggle is **Ctrl+Alt+A** (same as the main app).
+
+## Features
+- Set click interval in seconds.
+- Start and stop from the app window.
+- Toggle start/stop using a global hotkey: **Ctrl+Alt+A**.
+- Uses your current mouse cursor position.
+- PyAutoGUI failsafe is enabled (move mouse to top-left corner to trigger failsafe exception).
+
+## Setup
+1. Create and activate a virtual environment (optional but recommended):
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+## Run
+```bash
+python3 app.py
+```
+
+## Notes
+- Keep the interval reasonable (for example `0.1` to `1.0` seconds).
+- Use **Ctrl+Alt+A** to quickly activate/deactivate clicking.
