@@ -50,3 +50,6 @@
 +## Notes
 +- Minimum supported interval is `0.01` seconds.
 +- Use **Ctrl+Alt+A** to quickly activate/deactivate clicking.
+ 
+EOF
+)
