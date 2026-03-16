@@ -24,6 +24,16 @@
 +
 +Hotkey toggle is **Ctrl+Alt+A** (same as the main app).
 +
++## Chromebook / ChromeOS (Linux / Crostini)
++A Chromebook-friendly build is available as `app_chromebook.py` (runs inside the Linux development environment).
++
++Run it on ChromeOS with:
++```bash
++python3 app_chromebook.py
++```
++
++If global hotkeys or clicking do not work, try using the Start/Stop buttons (some sessions/window managers restrict input hooks).
++
 +## Features
 +- Set click interval in seconds.
 +- Start and stop from the app window.
