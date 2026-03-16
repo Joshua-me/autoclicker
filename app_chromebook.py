@@ -12,11 +12,24 @@ import time
 import tkinter as tk
 from tkinter import messagebox
 
-import pyautogui
-from pynput import keyboard
-
 TOGGLE_HOTKEY = "<ctrl>+<alt>+a"
 MIN_INTERVAL_SECONDS = 0.01
+
+try:
+    import pyautogui
+except ModuleNotFoundError as error:
+    raise SystemExit(
+        "Missing dependency 'pyautogui'. Activate the project virtualenv "
+        "or run: pip install -r requirements.txt"
+    ) from error
+
+try:
+    from pynput import keyboard
+except ModuleNotFoundError as error:
+    raise SystemExit(
+        "Missing dependency 'pynput'. Activate the project virtualenv "
+        "or run: pip install -r requirements.txt"
+    ) from error
 
 
 class ChromebookAutoClickerApp:
@@ -163,7 +176,15 @@ if __name__ == "__main__":
     pyautogui.FAILSAFE = True
     pyautogui.PAUSE = 0
 
-    root = tk.Tk()
+    try:
+        root = tk.Tk()
+    except tk.TclError as error:
+        raise SystemExit(
+            "Unable to start the Tk GUI. Run this app from a Linux desktop session "
+            "with X11/XWayland access enabled.\n"
+            f"Details: {error}"
+        ) from error
+
     app = ChromebookAutoClickerApp(root)
     root.protocol("WM_DELETE_WINDOW", lambda: (app.shutdown(), root.destroy()))
     root.mainloop()
