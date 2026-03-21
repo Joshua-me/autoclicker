@@ -1,7 +1,8 @@
-"""ChromeOS/Chromebook autoclicker GUI with template-based mouse tracking."""
+"""macOS autoclicker with template-based mouse tracking for macOS 11+."""
 
 from __future__ import annotations
 
+import platform
 import threading
 import time
 import tkinter as tk
@@ -11,6 +12,7 @@ MIN_INTERVAL_SECONDS = 0.01
 TARGET_CAPTURE_SIZE = 80
 MATCH_CONFIDENCE = 0.72
 TOGGLE_HOTKEY = "<ctrl>+<alt>+a"
+MIN_MACOS_MAJOR = 11
 
 try:
     import cv2
@@ -45,10 +47,21 @@ except ModuleNotFoundError as error:
     ) from error
 
 
-class ChromebookAutoClickerApp:
+def _macos_major_version() -> int:
+    version_string = platform.mac_ver()[0]
+    if not version_string:
+        return 0
+    major_text = version_string.split(".", maxsplit=1)[0]
+    try:
+        return int(major_text)
+    except ValueError:
+        return 0
+
+
+class MacAutoClickerApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("Simple Python Autoclicker (Chromebook/Linux)")
+        self.root.title("Simple Python Autoclicker (macOS 11+)")
         self.root.resizable(False, False)
 
         self.running = False
@@ -104,7 +117,7 @@ class ChromebookAutoClickerApp:
             frame,
             textvariable=self.target_status_var,
             fg="#555",
-            wraplength=360,
+            wraplength=380,
             justify="left",
         ).grid(row=3, column=0, columnspan=2, pady=(10, 0), sticky="w")
 
@@ -112,29 +125,29 @@ class ChromebookAutoClickerApp:
             frame,
             text=f"Toggle hotkey: {TOGGLE_HOTKEY}",
             fg="#555",
-            wraplength=360,
+            wraplength=380,
             justify="left",
         ).grid(row=4, column=0, columnspan=2, pady=(10, 0), sticky="w")
 
         tk.Label(
             frame,
             text=(
-                "Hover the object to capture it, then enable tracking to keep following it "
+                "Hover the object to capture it, then enable tracking to follow it "
                 "across the screen while clicking."
             ),
             fg="#555",
-            wraplength=360,
+            wraplength=380,
             justify="left",
         ).grid(row=5, column=0, columnspan=2, pady=(6, 0), sticky="w")
 
         tk.Label(
             frame,
             text=(
-                "Chromebook tip: run inside Linux (Crostini). If hotkeys/clicks fail,\n"
-                "try a different window/session (X11/XWayland), or use Start/Stop."
+                "macOS 11+: enable Accessibility for clicks/hotkeys and Screen Recording "
+                "for screenshots in System Settings -> Privacy & Security."
             ),
             fg="#555",
-            wraplength=360,
+            wraplength=380,
             justify="left",
         ).grid(row=6, column=0, columnspan=2, pady=(10, 0), sticky="w")
 
@@ -207,7 +220,14 @@ class ChromebookAutoClickerApp:
                 f"Target: Captured {width}x{height} area around ({x}, {y})"
             )
         except Exception as error:
-            messagebox.showerror("Target capture failed", f"Could not capture target:\n{error}")
+            messagebox.showerror(
+                "Target capture failed",
+                (
+                    "Could not capture the screen region.\n"
+                    "On macOS 11+, verify Screen Recording permission for the app running Python.\n\n"
+                    f"Details: {error}"
+                ),
+            )
 
     def _click_loop(self, interval: float) -> None:
         try:
@@ -282,6 +302,12 @@ class ChromebookAutoClickerApp:
 
 
 if __name__ == "__main__":
+    if platform.system() != "Darwin":
+        raise SystemExit("app_mac.py is intended to run on macOS only.")
+
+    if _macos_major_version() < MIN_MACOS_MAJOR:
+        raise SystemExit("app_mac.py requires macOS 11.0 or newer.")
+
     pyautogui.FAILSAFE = True
     pyautogui.PAUSE = 0
 
@@ -289,11 +315,11 @@ if __name__ == "__main__":
         root = tk.Tk()
     except tk.TclError as error:
         raise SystemExit(
-            "Unable to start the Tk GUI. Run this app from a Linux desktop session "
-            "with X11/XWayland access enabled.\n"
+            "Unable to start the Tk GUI. Run this app from a macOS desktop session "
+            "with windowing access enabled.\n"
             f"Details: {error}"
         ) from error
 
-    app = ChromebookAutoClickerApp(root)
+    app = MacAutoClickerApp(root)
     root.protocol("WM_DELETE_WINDOW", lambda: (app.shutdown(), root.destroy()))
     root.mainloop()

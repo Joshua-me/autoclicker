@@ -1,4 +1,4 @@
-"""Windows-specific GUI autoclicker app with global hotkey toggle."""
+"""Windows-specific autoclicker with template-based mouse tracking."""
 
 from __future__ import annotations
 
@@ -8,8 +8,26 @@ import time
 import tkinter as tk
 from tkinter import messagebox
 
-TOGGLE_HOTKEY = "<ctrl>+<alt>+a"
 MIN_INTERVAL_SECONDS = 0.01
+TARGET_CAPTURE_SIZE = 80
+MATCH_CONFIDENCE = 0.72
+TOGGLE_HOTKEY = "<ctrl>+<alt>+a"
+
+try:
+    import cv2
+except ModuleNotFoundError as error:
+    raise SystemExit(
+        "Missing dependency 'opencv-python'. Activate the project virtualenv "
+        "or run: pip install -r requirements.txt"
+    ) from error
+
+try:
+    import numpy as np
+except ModuleNotFoundError as error:
+    raise SystemExit(
+        "Missing dependency 'numpy'. Activate the project virtualenv "
+        "or run: pip install -r requirements.txt"
+    ) from error
 
 try:
     import pyautogui
@@ -39,6 +57,9 @@ class WindowsAutoClickerApp:
         self.hotkey_listener: keyboard.GlobalHotKeys | None = None
         self.interval_var = tk.StringVar(value="0.1")
         self.status_var = tk.StringVar(value="Status: Stopped")
+        self.tracking_var = tk.BooleanVar(value=False)
+        self.target_status_var = tk.StringVar(value="Target: Not captured")
+        self.target_template: np.ndarray | None = None
 
         self._build_ui()
         self._start_hotkey_listener()
@@ -52,8 +73,24 @@ class WindowsAutoClickerApp:
             row=0, column=1, padx=(8, 0), sticky="w"
         )
 
+        self.capture_button = tk.Button(
+            frame,
+            text="Capture Target",
+            width=12,
+            command=self.capture_target,
+        )
+        self.capture_button.grid(row=1, column=0, pady=(12, 0), sticky="w")
+
+        tk.Checkbutton(
+            frame,
+            text="Track captured target",
+            variable=self.tracking_var,
+            onvalue=True,
+            offvalue=False,
+        ).grid(row=1, column=1, pady=(12, 0), sticky="w")
+
         self.start_button = tk.Button(frame, text="Start", width=12, command=self.start)
-        self.start_button.grid(row=1, column=0, pady=(12, 0), sticky="w")
+        self.start_button.grid(row=2, column=0, pady=(12, 0), sticky="w")
 
         self.stop_button = tk.Button(
             frame,
@@ -62,26 +99,45 @@ class WindowsAutoClickerApp:
             command=self.stop,
             state="disabled",
         )
-        self.stop_button.grid(row=1, column=1, pady=(12, 0), sticky="w")
+        self.stop_button.grid(row=2, column=1, pady=(12, 0), sticky="w")
+
+        tk.Label(
+            frame,
+            textvariable=self.target_status_var,
+            fg="#555",
+            wraplength=360,
+            justify="left",
+        ).grid(row=3, column=0, columnspan=2, pady=(10, 0), sticky="w")
 
         tk.Label(
             frame,
             text=f"Toggle hotkey: {TOGGLE_HOTKEY}",
             fg="#555",
-            wraplength=320,
+            wraplength=360,
             justify="left",
-        ).grid(row=2, column=0, columnspan=2, pady=(10, 0), sticky="w")
+        ).grid(row=4, column=0, columnspan=2, pady=(10, 0), sticky="w")
 
         tk.Label(
             frame,
-            text="Windows tip: if clicks are blocked in some apps, run terminal as Administrator.",
+            text=(
+                "Hover the object to capture it, then enable tracking to keep following it "
+                "across the screen while clicking."
+            ),
             fg="#555",
-            wraplength=320,
+            wraplength=360,
             justify="left",
-        ).grid(row=3, column=0, columnspan=2, pady=(6, 0), sticky="w")
+        ).grid(row=5, column=0, columnspan=2, pady=(6, 0), sticky="w")
+
+        tk.Label(
+            frame,
+            text="Windows tip: if clicks are blocked in some apps, run the terminal as Administrator.",
+            fg="#555",
+            wraplength=360,
+            justify="left",
+        ).grid(row=6, column=0, columnspan=2, pady=(10, 0), sticky="w")
 
         tk.Label(frame, textvariable=self.status_var).grid(
-            row=4, column=0, columnspan=2, pady=(12, 0), sticky="w"
+            row=7, column=0, columnspan=2, pady=(12, 0), sticky="w"
         )
 
     def _start_hotkey_listener(self) -> None:
@@ -97,7 +153,8 @@ class WindowsAutoClickerApp:
                 "Hotkey unavailable",
                 (
                     "Global hotkey could not be started.\n"
-                    f"You can still use Start/Stop buttons.\n\nDetails: {error}"
+                    "You can still use Start/Stop buttons.\n\n"
+                    f"Details: {error}"
                 ),
             )
 
@@ -110,20 +167,71 @@ class WindowsAutoClickerApp:
         else:
             self.start()
 
-    def _handle_clicking_error(self, error: Exception) -> None:
+    def _handle_runtime_error(self, title: str, error: Exception) -> None:
         self.stop()
-        messagebox.showerror(
-            "Autoclicker stopped",
-            f"Clicking stopped due to an error:\n{error}",
-        )
+        messagebox.showerror(title, f"Stopped due to an error:\n{error}")
+
+    def _screen_to_gray(self, screenshot) -> np.ndarray:
+        return cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2GRAY)
+
+    def _find_target_center(self) -> tuple[int, int] | None:
+        if self.target_template is None:
+            return None
+
+        screenshot = pyautogui.screenshot()
+        screen_gray = self._screen_to_gray(screenshot)
+        result = cv2.matchTemplate(screen_gray, self.target_template, cv2.TM_CCOEFF_NORMED)
+        _, max_value, _, max_location = cv2.minMaxLoc(result)
+        if max_value < MATCH_CONFIDENCE:
+            return None
+
+        template_height, template_width = self.target_template.shape
+        center_x = max_location[0] + template_width // 2
+        center_y = max_location[1] + template_height // 2
+        return center_x, center_y
+
+    def capture_target(self) -> None:
+        try:
+            x, y = pyautogui.position()
+            half_size = TARGET_CAPTURE_SIZE // 2
+            screen_width, screen_height = pyautogui.size()
+            width = min(TARGET_CAPTURE_SIZE, screen_width)
+            height = min(TARGET_CAPTURE_SIZE, screen_height)
+            left = max(0, min(x - half_size, screen_width - width))
+            top = max(0, min(y - half_size, screen_height - height))
+            screenshot = pyautogui.screenshot(region=(left, top, width, height))
+            self.target_template = self._screen_to_gray(screenshot)
+            self.target_status_var.set(
+                f"Target: Captured {width}x{height} area around ({x}, {y})"
+            )
+        except Exception as error:
+            messagebox.showerror("Target capture failed", f"Could not capture target:\n{error}")
 
     def _click_loop(self, interval: float) -> None:
         try:
             while self.running:
+                if self.tracking_var.get():
+                    target_center = self._find_target_center()
+                    if target_center is None:
+                        self.root.after(
+                            0,
+                            lambda: self.status_var.set("Status: Running (target not found)"),
+                        )
+                        time.sleep(interval)
+                        continue
+
+                    pyautogui.moveTo(*target_center)
+                    self.root.after(
+                        0,
+                        lambda x=target_center[0], y=target_center[1]: self.status_var.set(
+                            f"Status: Running (tracking at {x}, {y})"
+                        ),
+                    )
+
                 pyautogui.click()
                 time.sleep(interval)
         except Exception as error:
-            self.root.after(0, lambda: self._handle_clicking_error(error))
+            self.root.after(0, lambda: self._handle_runtime_error("Autoclicker stopped", error))
 
     def start(self) -> None:
         if self.running:
@@ -140,10 +248,16 @@ class WindowsAutoClickerApp:
             )
             return
 
+        if self.tracking_var.get() and self.target_template is None:
+            messagebox.showerror("Target required", "Capture a target before enabling tracking.")
+            return
+
+        mode = "tracking + clicking" if self.tracking_var.get() else "clicking"
         self.running = True
-        self.status_var.set(f"Status: Running (every {interval:.3f}s)")
+        self.status_var.set(f"Status: Running ({mode} every {interval:.3f}s)")
         self.start_button.config(state="disabled")
         self.stop_button.config(state="normal")
+        self.capture_button.config(state="disabled")
 
         self.worker_thread = threading.Thread(
             target=self._click_loop,
@@ -157,6 +271,7 @@ class WindowsAutoClickerApp:
         self.status_var.set("Status: Stopped")
         self.start_button.config(state="normal")
         self.stop_button.config(state="disabled")
+        self.capture_button.config(state="normal")
 
     def shutdown(self) -> None:
         self.stop()
